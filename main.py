@@ -1,6 +1,7 @@
 import cv2
 import csv
 import random
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,7 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn import model_selection
 from sklearn.model_selection import StratifiedKFold
-
 
 
 resize = (30, 30)
@@ -41,8 +41,7 @@ def readTrafficSigns(rootpath):
     return images, labels
 
 
-def reshape_img(images, shape):
-    print('\n -- Image Reshaping --')
+def reshape_img(images, shape=resize):
     result = list()
 
     # Loop over all images
@@ -67,11 +66,7 @@ def reshape_img(images, shape):
     return result
 
 
-def data_split(images, labels, augment, shape = resize):
-
-    print('\n -- Image Transformation -- ')
-    images = reshape_img(images, shape)
-
+def data_split(images, labels, augment=True):
     print('\n -- Splitting the data -- ')
     # getting info of classes for frequency
     existing_classes = [len(list(group)) for key, group in groupby(labels)]
@@ -107,11 +102,6 @@ def data_split(images, labels, augment, shape = resize):
     if augment:
         print('\n -- Augmentation --')
         train_set, train_labels = augmentation(train_set, train_labels)
-
-    # Normalization
-    print('\n -- Image Normalization --')
-    train_set = normalize(train_set)
-    test_set = normalize(test_set)
 
     # Combine images and labels so we can shuffle them safely
     train = list(zip(train_set, train_labels))
@@ -177,44 +167,66 @@ def normalize(images):
 
 def experimentation(trainImages, trainLabels):
     # No augmentation
-    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=False)
-    classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
-    print('\n -- Training -- ')
-    classifier.fit(X_train, y_train)
+    # X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=False)
+    # classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
+    # print('\n -- Training -- ')
+    # classifier.fit(X_train, y_train)
+    #
+    # print('\n -- Evaluating -- ')
+    # y_pred = classifier.predict(X_test)
+    # print('\n ************** Results WITHOUT Augmentation **************')
+    # # print(classification_report(y_test, y_pred))
+    # print(accuracy_score(y_test, y_pred))
+    #
+    # # Augmentation is used
+    # X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels)
+    # classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
+    # print('\n -- Training -- ')
+    # classifier.fit(X_train, y_train)
+    #
+    # print('\n -- Evaluating -- ')
+    # y_pred = classifier.predict(X_test)
+    # print('\n ************** Results WITH Augmentation **************')
+    # print(accuracy_score(y_test, y_pred))
 
-    print('\n -- Evaluating -- ')
-    y_pred = classifier.predict(X_test)
-    print('\n ************** Results WITHOUT Augmentation **************')
-    print(classification_report(y_test, y_pred))
-    print(accuracy_score(y_test, y_pred))
+    """Different Image Sizes"""
+    times = list()
+    accuracies = list()
+    shapes = [(30 + i * 30, 30 + i * 30) for i in range(7)]
 
+    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels)
+    classifier = RandomForestClassifier(n_estimators=40)  # n_estimators=100, max_depth=100
 
-    # Augmentation is used
-    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
-    classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
-    print('\n -- Training -- ')
-    classifier.fit(X_train, y_train)
+    for new_shape in shapes:
 
-    print('\n -- Evaluating -- ')
-    y_pred = classifier.predict(X_test)
-    print('\n ************** Results WITH Augmentation **************')
-    print(classification_report(y_test, y_pred))
-    print(accuracy_score(y_test, y_pred))
+        print('\n -- Image Transformation -- ')
+        X_train_new = reshape_img(X_train, new_shape)
+        X_test_new = reshape_img(X_test, new_shape)
 
-
-    # Different Image Sizes
-    for i in range(6):
-        new_shape = (30 + i * 10, 30 + i * 10)
-        X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True, shape=new_shape)
-        classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
+        print('\n -- Image Normalization --')
+        X_train_new = normalize(X_train_new)
+        X_test_new = normalize(X_test_new)
+        
+        start_time = time.time()
         print('\n -- Training -- ')
-        classifier.fit(X_train, y_train)
-
+        classifier.fit(X_train_new, y_train)
         print('\n -- Evaluating -- ')
-        y_pred = classifier.predict(X_test)
-        print('\n ************** Results WITH IMG SIZE: ',new_shape ,' **************')
-        print(classification_report(y_test, y_pred))
-        print(accuracy_score(y_test, y_pred))
+        y_pred = classifier.predict(X_test_new)
+        print('\n ************** Results WITH IMG SIZE: ', new_shape, ' **************')
+        accuracy = accuracy_score(y_test, y_pred)
+        print(accuracy)
+        end_time = time.time()
+
+        times.append(end_time - start_time)
+        accuracies.append(accuracy)
+
+    plt.plot(accuracies, times)
+    plt.ylabel('times')
+    plt.xlabel('accuracy')
+
+    plt.plot(accuracies, shapes)
+    plt.ylabel('shape')
+    plt.xlabel('accuracy')
 
 
 def parameter_tuning(trainImages, trainLabels):
@@ -245,9 +257,19 @@ def main():
     experimentation(trainImages, trainLabels)
 
     # X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
+    #
+    # print('\n -- Image Transformation -- ')
+    # X_train = reshape_img(X_train, new_shape)
+    # X_test = reshape_img(X_test, new_shape)
+    #
+    # print('\n -- Image Normalization --')
+    # X_train = normalize(X_train)
+    # X_test = normalize(X_test)
     # classifier = RandomForestClassifier(n_estimators=60, max_depth=70)  # n_estimators=100, max_depth=100
     # print('\n -- Training -- ')
     # classifier.fit(X_train, y_train)
+    #
+    #
     #
     # print('\n -- Evaluating -- ')
     # y_pred = classifier.predict(X_test)
