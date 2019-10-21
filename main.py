@@ -244,7 +244,7 @@ def main():
     """
     experimentation(trainImages, trainLabels)
 
-    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
+    # X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
     # classifier = RandomForestClassifier(n_estimators=60, max_depth=70)  # n_estimators=100, max_depth=100
     # print('\n -- Training -- ')
     # classifier.fit(X_train, y_train)
