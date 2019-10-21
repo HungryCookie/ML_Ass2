@@ -1,4 +1,3 @@
-import os
 import cv2
 import csv
 import random
@@ -12,11 +11,12 @@ from skimage.util import random_noise
 from skimage import exposure
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-from sklearn.utils import validation
+from sklearn import model_selection
+from sklearn.model_selection import StratifiedKFold
 
 
 
-resize = (60, 60)
+resize = (30, 30)
 CLASSES_FREQUENCY = 0
 
 def readTrafficSigns(rootpath):
@@ -26,7 +26,7 @@ def readTrafficSigns(rootpath):
     Returns:   list of images, list of corresponding labels'''
     images = [] # images
     labels = [] # corresponding labels
-    print(' -- Reading data -- ')
+    print('\n -- Reading data -- ')
     # loop over all 42 classes
     for c in tqdm(range(0,43)):
         prefix = rootpath + '/' + format(c, '05d') + '/' # subdirectory for class
@@ -41,10 +41,13 @@ def readTrafficSigns(rootpath):
     return images, labels
 
 
-def reshape_img(images):
+def reshape_img(images, shape):
     print('\n -- Image Reshaping --')
     result = list()
+
+    # Loop over all images
     for img in images:
+        # Get values for either horizontal or vertical padding
         height, width = img.shape[1], img.shape[0]
         top, bottom, left, right = 0, 0, 0, 0
         if width > height:  # get params for padding
@@ -56,7 +59,7 @@ def reshape_img(images):
             top = np.floor((height - width) / 2).astype(int)
             left, right = 0, 0
         img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_REPLICATE)  # add padding
-        img = cv2.resize(img, resize)  # resize according to specifications
+        img = cv2.resize(img, shape)  # resize according to specifications
         result.append(img)
     # plt.imshow(result[0])
     # plt.show()
@@ -64,8 +67,10 @@ def reshape_img(images):
     return result
 
 
-def data_split(images, labels):
-    images = reshape_img(images)
+def data_split(images, labels, augment, shape = resize):
+
+    print('\n -- Image Transformation -- ')
+    images = reshape_img(images, shape)
 
     print('\n -- Splitting the data -- ')
     # getting info of classes for frequency
@@ -80,6 +85,11 @@ def data_split(images, labels):
     train_labels = list()
     test_set = list()
     test_labels = list()
+
+    """
+    Loop over all images
+    With random probability `random_split` the track goes either to training set or to the validation set
+    """
     for i in tqdm(range(len(images))):
         if counter == 30:  # after each 30th pic new track begins
             counter = 0
@@ -94,9 +104,12 @@ def data_split(images, labels):
         counter += 1
 
     # Augmentation
-    # train_set, train_labels = augmentation(train_set, train_labels)
+    if augment:
+        print('\n -- Augmentation --')
+        train_set, train_labels = augmentation(train_set, train_labels)
 
     # Normalization
+    print('\n -- Image Normalization --')
     train_set = normalize(train_set)
     test_set = normalize(test_set)
 
@@ -121,7 +134,6 @@ def data_split(images, labels):
 
 def augmentation(images, labels):
     class_freq = [len(list(group)) for key, group in groupby(labels)]
-    print('\n -- Augmentation --')
     # print('\n > Before augmentation: ', len(images), ' --- ', np.max(class_freq))
     # print(class_freq)
     max_class_size = np.max(class_freq)
@@ -163,19 +175,88 @@ def normalize(images):
     return images
 
 
-def main():
-    trainImages, trainLabels = readTrafficSigns('GTSRB/Final_Training/Images')
-    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels)
-
-    classifier = RandomForestClassifier(n_estimators=60, max_depth=100)
+def experimentation(trainImages, trainLabels):
+    # No augmentation
+    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=False)
+    classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
     print('\n -- Training -- ')
     classifier.fit(X_train, y_train)
 
     print('\n -- Evaluating -- ')
     y_pred = classifier.predict(X_test)
-    print(confusion_matrix(y_test, y_pred))
+    print('\n ************** Results WITHOUT Augmentation **************')
     print(classification_report(y_test, y_pred))
     print(accuracy_score(y_test, y_pred))
+
+
+    # Augmentation is used
+    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
+    classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
+    print('\n -- Training -- ')
+    classifier.fit(X_train, y_train)
+
+    print('\n -- Evaluating -- ')
+    y_pred = classifier.predict(X_test)
+    print('\n ************** Results WITH Augmentation **************')
+    print(classification_report(y_test, y_pred))
+    print(accuracy_score(y_test, y_pred))
+
+
+    # Different Image Sizes
+    for i in range(6):
+        new_shape = (30 + i * 10, 30 + i * 10)
+        X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True, shape=new_shape)
+        classifier = RandomForestClassifier(n_estimators=60)  # n_estimators=100, max_depth=100
+        print('\n -- Training -- ')
+        classifier.fit(X_train, y_train)
+
+        print('\n -- Evaluating -- ')
+        y_pred = classifier.predict(X_test)
+        print('\n ************** Results WITH IMG SIZE: ',new_shape ,' **************')
+        print(classification_report(y_test, y_pred))
+        print(accuracy_score(y_test, y_pred))
+
+
+def parameter_tuning(trainImages, trainLabels):
+    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
+    best_accuracy = 0
+    best_parameter = 0
+    for i in range(10, 200):
+        classifier = RandomForestClassifier(n_estimators=i)  # n_estimators=100, max_depth=100
+        print('\n -- Training -- ')
+        classifier.fit(X_train, y_train)
+
+        print('\n -- Evaluating -- ')
+        y_pred = classifier.predict(X_test)
+        result = accuracy_score(y_test, y_pred)
+        if result > best_accuracy:
+            best_accuracy = result
+            best_parameter = i
+        print('\n ************** Results with n_estimators = ',i ,' **************')
+        print(classification_report(y_test, y_pred))
+        print(result)
+    print('\n Best result was *', best_accuracy, '* with n_estimateor = ', best_parameter)
+
+def main():
+    trainImages, trainLabels = readTrafficSigns('GTSRB/Final_Training/Images')
+    """
+    Use for experiments only!
+    """
+    experimentation(trainImages, trainLabels)
+
+    X_train, y_train, X_test, y_test = data_split(trainImages, trainLabels, augment=True)
+    # classifier = RandomForestClassifier(n_estimators=60, max_depth=70)  # n_estimators=100, max_depth=100
+    # print('\n -- Training -- ')
+    # classifier.fit(X_train, y_train)
+    #
+    # print('\n -- Evaluating -- ')
+    # y_pred = classifier.predict(X_test)
+    # # print(confusion_matrix(y_test, y_pred))
+    # print(classification_report(y_test, y_pred))
+    # print(accuracy_score(y_test, y_pred))
+
+    # result = classifier.score(X_test, y_test)
+    # print("Accuracy: %.2f%%" % (result * 100.0))
 
 
 
